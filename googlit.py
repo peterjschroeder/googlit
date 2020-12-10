@@ -69,14 +69,6 @@ class ListBoxItem(urwid.Text):
                 searchbox.base_widget.edit_text = ''
         return key
 
-def SquareSelect():
-    _, idx = listbox.get_focus()
-    if idx-1 >= 0:
-        content[idx-1].original_widget = content[idx-1].base_widget
-    if idx+1 < len(content):
-        content[idx+1].original_widget = content[idx+1].base_widget
-    content[idx].original_widget = urwid.AttrMap(urwid.LineBox(content[idx].original_widget, tlcorner='┏', tline='━', lline='┃', trcorner='┓', blcorner='┗', rline='┃', bline='━', brcorner='┛'), None, 'selector')
-
 def PerformSearch(term):
     results = []
 
@@ -92,7 +84,7 @@ def PerformSearch(term):
                     matches += ', '
                 matches += "%s (%s)" % (j.get('phrase'), j.get('offset'))
 
-        results.append(ListBoxItem([("title", i.title+'\n'), ("url", i.url+'\n'), ("meta", i.metadata.replace(' | ', '\n')+'\n' if i.metadata else ""), ("matches", "Matches: %s" % (matches)+'\n' if matches else ""), ("desc", i.abstract+'\n')])) 
+        results.append(urwid.AttrMap(urwid.LineBox(ListBoxItem([("title", i.title+'\n'), ("url", i.url+'\n'), ("meta", i.metadata.replace(' | ', '\n')+'\n' if i.metadata else ""), ("matches", "Matches: %s" % (matches)+'\n' if matches else ""), ("desc", i.abstract)]), tlcorner='┏', tline='━', lline='┃', trcorner='┓', blcorner='┗', rline='┃', bline='━', brcorner='┛'), 'item_frame', focus_map='item_frame_focus'))
 
     content[:] = [urwid.AttrMap(w, None, 'default') for w in results]
 
@@ -110,14 +102,14 @@ palette = [
         ('desc', 'default', 'default'),
         ('meta', 'dark cyan', 'default'),
         ('matches', 'dark magenta', 'default'),
-        ('selector', 'light cyan', 'default')
+        ('item_frame', 'black', 'black'),
+        ('item_frame_focus', 'light cyan', 'default')
         ]
 
 searchicon = urwid.Text("\U0001F50D")
 searchbox = urwid.AttrMap(SearchBox(""), "searchbox", focus_map="searchbox_focus")
 content = urwid.SimpleListWalker([])
 listbox = urwid.ListBox(content)
-urwid.connect_signal(content, "modified", SquareSelect)
 
 frame = urwid.Frame(listbox, urwid.Pile([urwid.Columns([(3, searchicon), searchbox]), urwid.AttrMap(urwid.Divider('─'), "border")]), focus_part="header")
 
