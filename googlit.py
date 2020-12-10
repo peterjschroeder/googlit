@@ -8,9 +8,13 @@ from xdg.BaseDirectory import *
 os.makedirs(os.path.join(xdg_config_home, "googlit"), exist_ok=True)
 config_defaults_googlit = {
         'clear_search_on_focus': 'false',
+        'country': 'us',
         'language': 'en',
         'max_results': '30',
-        'exclude': 'pinterest.com'
+        'exclude': 'linkedin.com,nolo.com,pinterest.*,simplelifestrategies.com,shopify.com,softlay.net,*.softonic.com', 
+        'unfilter': 'false',
+        'notweak': 'false',
+        'ipv6': 'false'
         }
 
 config = configparser.ConfigParser()
@@ -25,9 +29,13 @@ if os.path.exists(os.path.join(xdg_config_home, 'googlit/config')):
     with open(os.path.join(xdg_config_home, 'googlit/config'), 'w') as configfile:
         config.write(configfile)
     clear_search_on_focus = config.getboolean('googlit', 'clear_search_on_focus')
+    country = config['googlit']['country']
     language = config['googlit']['language']
-    max_results = int(config['googlit']['max_results'])
+    max_results = config['googlit']['max_results']
     exclude = config['googlit']['exclude']
+    unfilter = config.getboolean('googlit', 'unfilter')
+    notweak = config.getboolean('googlit', 'notweak')
+    ipv6 = config.getboolean('googlit', 'ipv6')
 
 else:
     config.add_section('googlit')
@@ -72,7 +80,7 @@ class ListBoxItem(urwid.Text):
 def PerformSearch(term):
     results = []
 
-    repl = googler.GooglerCmd(googler.parse_args(['-n 30', term]))
+    repl = googler.GooglerCmd(googler.parse_args(['-n '+max_results, '-c '+country, '--unfilter' if unfilter else '', '--notweak' if notweak else '', '--ipv6' if ipv6 else '', term + ''.join([' -site:'+j for j in exclude.split(',')])]))
     repl.fetch()
 
     for i in repl.results:
