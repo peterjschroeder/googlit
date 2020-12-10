@@ -87,7 +87,8 @@ def PerformSearch(term):
         results.append(urwid.AttrMap(urwid.LineBox(ListBoxItem([("title", i.title+'\n'), ("url", i.url+'\n'), ("meta", i.metadata.replace(' | ', '\n')+'\n' if i.metadata else ""), ("matches", "Matches: %s" % (matches)+'\n' if matches else ""), ("desc", i.abstract)]), tlcorner='┏', tline='━', lline='┃', trcorner='┓', blcorner='┗', rline='┃', bline='━', brcorner='┛'), 'item_frame', focus_map='item_frame_focus'))
 
     content[:] = [urwid.AttrMap(w, None, 'default') for w in results]
-
+    listbox.focus_position = 0
+    
 def exit_on_cq(input):
     if input in ('ctrl q', 'ctrl Q'):
         raise urwid.ExitMainLoop()
