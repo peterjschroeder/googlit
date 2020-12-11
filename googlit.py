@@ -4,6 +4,8 @@ from importlib.machinery import SourceFileLoader
 googler = SourceFileLoader("googler", "/usr/local/bin/googler").load_module()
 from xdg.BaseDirectory import *
 
+googler_options = []
+
 # Configuration
 os.makedirs(os.path.join(xdg_config_home, "googlit"), exist_ok=True)
 config_defaults_googlit = {
@@ -19,25 +21,7 @@ config_defaults_googlit = {
 
 config = configparser.ConfigParser()
 
-if os.path.exists(os.path.join(xdg_config_home, 'googlit/config')):
-    config.read(os.path.join(xdg_config_home, 'googlit/config'))
-
-    # Check for missing keys
-    for i in config_defaults_googlit:
-        if not config.has_option('googlit', i):
-            config['googlit'][i] = config_defaults_googlit[i]
-    with open(os.path.join(xdg_config_home, 'googlit/config'), 'w') as configfile:
-        config.write(configfile)
-    clear_search_on_focus = config.getboolean('googlit', 'clear_search_on_focus')
-    country = config['googlit']['country']
-    language = config['googlit']['language']
-    max_results = config['googlit']['max_results']
-    exclude = config['googlit']['exclude']
-    unfilter = config.getboolean('googlit', 'unfilter')
-    notweak = config.getboolean('googlit', 'notweak')
-    ipv6 = config.getboolean('googlit', 'ipv6')
-
-else:
+def config_create():
     config.add_section('googlit')
 
     for i in config_defaults_googlit:
@@ -45,6 +29,29 @@ else:
 
     with open(os.path.join(xdg_config_home, 'googlit/config'), 'w') as configfile:
         config.write(configfile)
+
+if not os.path.exists(os.path.join(xdg_config_home, 'googlit/config')):
+    config_create()
+
+config.read(os.path.join(xdg_config_home, 'googlit/config'))
+
+ # Check for missing keys
+for i in config_defaults_googlit:
+    if not config.has_option('googlit', i):
+        config['googlit'][i] = config_defaults_googlit[i]
+with open(os.path.join(xdg_config_home, 'googlit/config'), 'w') as configfile:
+    config.write(configfile)
+clear_search_on_focus = config.getboolean('googlit', 'clear_search_on_focus')
+googler_options.append('-c '+config['googlit']['country'])
+googler_options.append('-l'+config['googlit']['language'])
+googler_options.append('-n '+config['googlit']['max_results'])
+exclude = config['googlit']['exclude'].split(',')
+if config.getboolean('googlit', 'unfilter'):
+    googler_options.append('--unfilter')
+if config.getboolean('googlit', 'notweak'):
+    googler_options.append('--notweak')
+if config.getboolean('googlit', 'ipv6'):
+    googler_options.append('--ipv6')
 
 class SearchBox(urwid.Edit):
     def selectable(self):
@@ -80,7 +87,7 @@ class ListBoxItem(urwid.Text):
 def PerformSearch(term):
     results = []
 
-    repl = googler.GooglerCmd(googler.parse_args(['-n '+max_results, '-c '+country, '--unfilter' if unfilter else '', '--notweak' if notweak else '', '--ipv6' if ipv6 else '', term + ''.join([' -site:'+j for j in exclude.split(',')])]))
+    repl = googler.GooglerCmd(googler.parse_args(googler_options+[term+''.join([' -site:'+j for j in exclude])]))
     repl.fetch()
 
     for i in repl.results:
@@ -95,7 +102,8 @@ def PerformSearch(term):
         results.append(urwid.AttrMap(urwid.LineBox(ListBoxItem([("title", i.title+'\n'), ("url", i.url+'\n'), ("meta", i.metadata.replace(' | ', '\n')+'\n' if i.metadata else ""), ("matches", "Matches: %s" % (matches)+'\n' if matches else ""), ("desc", i.abstract)]), tlcorner='┏', tline='━', lline='┃', trcorner='┓', blcorner='┗', rline='┃', bline='━', brcorner='┛'), 'item_frame', focus_map='item_frame_focus'))
 
     content[:] = [urwid.AttrMap(w, None, 'default') for w in results]
-    listbox.focus_position = 0
+    if results:
+        listbox.focus_position = 0
     
 def exit_on_cq(input):
     if input in ('ctrl q', 'ctrl Q'):
