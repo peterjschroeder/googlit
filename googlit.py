@@ -10,6 +10,7 @@ googler_options = []
 # Configuration
 os.makedirs(os.path.join(xdg_config_home, "googlit"), exist_ok=True)
 config_defaults_googlit = {
+        'path_googler': '/usr/local/bin/googler',
         'clear_search_on_focus': 'false',
         'country': 'us',
         'language': 'en',
@@ -56,7 +57,7 @@ if not os.path.exists(os.path.join(xdg_config_home, 'googlit/config')):
 
 config.read(os.path.join(xdg_config_home, 'googlit/config'))
 
- # Check for missing keys
+# Check for missing keys
 for i in config_defaults_googlit:
     if not config.has_option('googlit', i):
         config['googlit'][i] = config_defaults_googlit[i]
@@ -78,6 +79,7 @@ palette = [
         (['item_frame']+config['pallette']['item_frame'].split(',')),
         (['item_frame_focus']+config['pallette']['item_frame_focus'].split(','))
         ]
+googler = SourceFileLoader("googler", os.path.expanduser(config['googlit']['path_googler'])).load_module()
 clear_search_on_focus = config.getboolean('googlit', 'clear_search_on_focus')
 googler_options.append('-c '+config['googlit']['country'])
 googler_options.append('-l'+config['googlit']['language'])
