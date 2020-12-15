@@ -1,7 +1,8 @@
 #!/usr/bin/python3
-import configparser, pyperclip, webbrowser, urwid
+import configparser, os, pyperclip, requests, subprocess, tempfile, threading, webbrowser, urwid, youtube_dl
 from importlib.machinery import SourceFileLoader
 googler = SourceFileLoader("googler", "/usr/local/bin/googler").load_module()
+from urllib.request import urlopen, urlparse, Request
 from xdg.BaseDirectory import *
 
 googler_options = []
@@ -16,16 +17,36 @@ config_defaults_googlit = {
         'exclude': 'linkedin.com,nolo.com,pinterest.*,simplelifestrategies.com,shopify.com,softlay.net,*.softonic.com', 
         'unfilter': 'false',
         'notweak': 'false',
-        'ipv6': 'false'
+        'ipv6': 'false',
+        'mediaplayer': 'mpv', 
+        'pdfviewer': 'zathura'
+        }
+
+config_defaults_pallette = {
+        'border': 'dark blue,default',
+        'searchbox': 'black,white',
+        'searchbox_focus': 'white,dark blue',
+        'reveal focus': 'white,dark blue,standout',
+        'url': 'brown,default',
+        'title': 'light green,default',
+        'desc': 'default,default',
+        'meta': 'dark cyan,default',
+        'matches': 'dark magenta,default',
+        'item_frame': 'black,black',
+        'item_frame_focus': 'light cyan,default'
         }
 
 config = configparser.ConfigParser()
 
 def config_create():
     config.add_section('googlit')
+    config.add_section('pallette')
 
     for i in config_defaults_googlit:
         config['googlit'][i] = config_defaults_googlit[i]
+
+    for i in config_defaults_pallette:
+        config['pallette'][i] = config_defaults_pallette[i]
 
     with open(os.path.join(xdg_config_home, 'googlit/config'), 'w') as configfile:
         config.write(configfile)
@@ -39,8 +60,24 @@ config.read(os.path.join(xdg_config_home, 'googlit/config'))
 for i in config_defaults_googlit:
     if not config.has_option('googlit', i):
         config['googlit'][i] = config_defaults_googlit[i]
+for i in config_defaults_pallette:
+    if not config.has_option('pallette', i):
+        config['pallette'][i] = config_defaults_pallette[i]
 with open(os.path.join(xdg_config_home, 'googlit/config'), 'w') as configfile:
     config.write(configfile)
+palette = [
+        (['border']+config['pallette']['border'].split(',')),
+        (['searchbox']+config['pallette']['searchbox'].split(',')),
+        (['searchbox_focus']+config['pallette']['searchbox_focus'].split(',')),
+        (['reveal focus']+config['pallette']['reveal focus'].split(',')),
+        (['url']+config['pallette']['url'].split(',')),
+        (['title']+config['pallette']['title'].split(',')),
+        (['desc']+config['pallette']['desc'].split(',')),
+        (['meta']+config['pallette']['meta'].split(',')),
+        (['matches']+config['pallette']['matches'].split(',')),
+        (['item_frame']+config['pallette']['item_frame'].split(',')),
+        (['item_frame_focus']+config['pallette']['item_frame_focus'].split(','))
+        ]
 clear_search_on_focus = config.getboolean('googlit', 'clear_search_on_focus')
 googler_options.append('-c '+config['googlit']['country'])
 googler_options.append('-l'+config['googlit']['language'])
@@ -52,6 +89,8 @@ if config.getboolean('googlit', 'notweak'):
     googler_options.append('--notweak')
 if config.getboolean('googlit', 'ipv6'):
     googler_options.append('--ipv6')
+mediaplayer = config['googlit']['mediaplayer']
+pdfviewer = config['googlit']['pdfviewer']
 
 class SearchBox(urwid.Edit):
     def selectable(self):
@@ -74,8 +113,36 @@ class ListBoxItem(urwid.Text):
         return True
 
     def keypress(self, size, key):
+        url = listbox.get_focus()[0].base_widget.text.splitlines()[1]
+
         if key == 'enter':
-            webbrowser.open(listbox.get_focus()[0].base_widget.text.splitlines()[1], new=2)
+            webbrowser.open(url, new=2, autoraise=False)
+        elif key in ('o', 'O'):
+            # Youtube-like videos
+            try:
+                for e in youtube_dl.extractor.gen_extractors():
+                    if e.suitable(url) and e.IE_NAME != 'generic':
+                        subprocess.Popen([mediaplayer, url], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                        return key
+            except:
+                pass
+
+            # Image galleries
+
+            # Everything else
+            response = requests.head(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+            if response.headers['content-type'].split('/')[0] == 'video':
+                response = requests.head(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+                subprocess.Popen([mediaplayer, url], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            elif response.headers['content-type'] == 'application/pdf':
+                def preview_pdf():
+                    response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+                    fname = '/tmp/'+response.headers.get("Content-Disposition").split("filename=")[1] if "Content-Disposition" in response.headers.keys() else url.split("/")[-1]
+                    with open(fname, 'wb') as f:
+                        f.write(response.content)
+                    subprocess.Popen([pdfviewer, f.name], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                thread = threading.Thread(target=preview_pdf)
+                thread.start()
         elif key in ('y', 'Y'):
             pyperclip.copy(listbox.get_focus()[0].base_widget.text.splitlines()[1])
         elif key == 'tab':
@@ -109,24 +176,11 @@ def exit_on_cq(input):
     if input in ('ctrl q', 'ctrl Q'):
         raise urwid.ExitMainLoop()
 
-palette = [
-        ('border', 'dark blue', 'default'),
-        ('searchbox', 'black', 'white'),
-        ('searchbox_focus', 'white', 'dark blue'),
-        ('reveal focus', 'white', 'dark blue', 'standout'),
-        ('url', 'brown', 'default'),
-        ('title', 'light green', 'default'),
-        ('desc', 'default', 'default'),
-        ('meta', 'dark cyan', 'default'),
-        ('matches', 'dark magenta', 'default'),
-        ('item_frame', 'black', 'black'),
-        ('item_frame_focus', 'light cyan', 'default')
-        ]
-
 searchicon = urwid.Text("\U0001F50D")
 searchbox = urwid.AttrMap(SearchBox(""), "searchbox", focus_map="searchbox_focus")
 content = urwid.SimpleListWalker([])
 listbox = urwid.ListBox(content)
+preview = urwid.Text("")
 
 frame = urwid.Frame(listbox, urwid.Pile([urwid.Columns([(3, searchicon), searchbox]), urwid.AttrMap(urwid.Divider('─'), "border")]), focus_part="header")
 
