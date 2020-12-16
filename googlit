@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 import configparser, os, pyperclip, requests, subprocess, tempfile, threading, webbrowser, urwid, youtube_dl
 from importlib.machinery import SourceFileLoader
 googler = SourceFileLoader("googler", "/usr/local/bin/googler").load_module()
