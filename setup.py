@@ -10,6 +10,6 @@ setup(
         author_email='peterjschroeder@gmail.com', 
         url='https://github.com/peterjschroeder/googlit',
         scripts=['googlit.py'],
-        install_requires=['pyperclip', 'urwid']
+        install_requires=['gallery-dl @ git+https://github.com/mikf/gallery-dl.git', 'pyperclip', 'urwid', 'xdg', 'youtube-dl']
 )
 
