@@ -1,4 +1,5 @@
 # googlit
+pip install git+https://github.com/peterjschroeder/googlit.git \
 Requires googler. Install from git (pip version is very old).\
 ENTER opens link in browser\
 O opens the url in an application (currently supports videos and pdfs)\
