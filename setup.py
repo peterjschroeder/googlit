@@ -4,7 +4,7 @@ from distutils.core import setup
 
 setup(
         name='googlit', 
-        version='0.1', 
+        version='0.11', 
         description='Frontend for googler', 
         author='Peter J. Schroeder', 
         author_email='peterjschroeder@gmail.com', 
