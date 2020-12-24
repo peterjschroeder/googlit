@@ -20,9 +20,11 @@ config_defaults_googlit = {
         'notweak': 'false',
         'ipv6': 'false',
         'termexec': 'xterm -e',
-        'pager': 'less -R',
-        'mediaplayer': 'mpv', 
-        'pdfviewer': 'zathura'
+        'pager': 'less -r',
+        'mediaplayer': 'mpv;noterm',
+        'docviewer': 'antiword -f -w 80;pager',
+        'pdfviewer': 'zathura;noterm',
+        'tabviewer': 'visidata'
         }
 
 config_defaults_pallette = {
@@ -96,7 +98,24 @@ if config.getboolean('googlit', 'ipv6'):
 termexec = config['googlit']['termexec']
 pager = config['googlit']['pager']
 mediaplayer = config['googlit']['mediaplayer']
+docviewer = config['googlit']['docviewer']
 pdfviewer = config['googlit']['pdfviewer']
+tabviewer = config['googlit']['tabviewer']
+
+def download_and_open(url, viewer):
+    response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+    fname = '/tmp/googlit/'+response.headers.get("Content-Disposition").split("filename=")[1] if "Content-Disposition" in response.headers.keys() else '/tmp/googlit/'+url.split("/")[-1]
+    with open(fname, 'wb') as f:
+        f.write(response.content)
+    viewer, *options = viewer.split(';')
+
+    if 'pager' in options:
+        output = subprocess.run(shlex.split(viewer)+[f.name], stdout=subprocess.PIPE)
+        with open(fname+'.txt', 'wb') as f:
+            f.write(output.stdout)
+        viewer = pager
+
+    subprocess.Popen(shlex.split(viewer if 'noterm' in options else '%s %s' % (termexec, viewer))+[f.name], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
 class SearchBox(urwid.Edit):
     def selectable(self):
@@ -141,14 +160,14 @@ class ListBoxItem(urwid.Text):
             if response.headers['content-type'].split('/')[0] == 'video':
                 response = requests.head(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
                 subprocess.Popen([mediaplayer, url], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            elif response.headers['content-type'] == 'application/msword' or url.split('/')[-1].split('.')[-1] == 'doc':
+                thread = threading.Thread(target=download_and_open(url, docviewer))
+                thread.start()
+            elif response.headers['content-type'] in ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application', 'vnd.sqlite3,application/x-sqlite3', 'text/csv', 'application/x-hdf5'] or url.split('/')[-1].split('.')[-1] in ['csv', 'db', 'db-shm', 'hdf5', 'sqlite', 'sqlite-shm', 'sqlite-wal', 'tsv', 'xls', 'xlsx']:
+                thread = threading.Thread(target=download_and_open(url, tabviewer))
+                thread.start()
             elif response.headers['content-type'] == 'application/pdf' or url.split('/')[-1].split('.')[-1] == 'pdf':
-                def preview_pdf():
-                    response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
-                    fname = '/tmp/googlit/'+response.headers.get("Content-Disposition").split("filename=")[1] if "Content-Disposition" in response.headers.keys() else '/tmp/googlit/'+url.split("/")[-1]
-                    with open(fname, 'wb') as f:
-                        f.write(response.content)
-                    subprocess.Popen([pdfviewer, f.name], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-                thread = threading.Thread(target=preview_pdf)
+                thread = threading.Thread(target=download_and_open(url, pdfviewer))
                 thread.start()
             else:
                 def preview_html():
