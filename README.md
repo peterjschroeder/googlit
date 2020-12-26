@@ -5,5 +5,5 @@ googler (Install from git, pip version is very old)\
 xclip or xsel\
 **Keys**\
 ENTER opens link in browser\
-O opens the url in an application (currently supports videos and pdfs)\
+O opens the url in an application\
 Y copies the url to clipboard
