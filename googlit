@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import configparser, glob, os, pyperclip, requests, shlex, subprocess, threading, time, trafilatura, webbrowser, urwid, youtube_dl
+import configparser, gallery_dl, glob, os, pyperclip, requests, shlex, shutil, subprocess, threading, time, trafilatura, webbrowser, urwid, youtube_dl
 from importlib.machinery import SourceFileLoader
 googler = SourceFileLoader("googler", "/usr/local/bin/googler").load_module()
 from urllib.request import urlopen, urlparse, Request
@@ -23,6 +23,7 @@ config_defaults_googlit = {
         'pager': 'less -r',
         'mediaplayer': 'mpv;noterm',
         'docviewer': 'antiword -f -w 80;pager',
+        'imageviewer': 'fim -R',
         'pdfviewer': 'zathura;noterm',
         'tabviewer': 'visidata'
         }
@@ -99,6 +100,7 @@ termexec = config['googlit']['termexec']
 pager = config['googlit']['pager']
 mediaplayer = config['googlit']['mediaplayer']
 docviewer = config['googlit']['docviewer']
+imageviewer = config['googlit']['imageviewer']
 pdfviewer = config['googlit']['pdfviewer']
 tabviewer = config['googlit']['tabviewer']
 
@@ -115,7 +117,8 @@ def download_and_open(url, viewer):
             f.write(output.stdout)
         viewer = pager
 
-    subprocess.Popen(shlex.split(viewer if 'noterm' in options else '%s %s' % (termexec, viewer))+[f.name], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    subprocess.Popen(shlex.split(viewer if 'noterm' in options else '%s %s' % 
+        (termexec, viewer))+[f.name], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
 class SearchBox(urwid.Edit):
     def selectable(self):
@@ -144,22 +147,45 @@ class ListBoxItem(urwid.Text):
             webbrowser.open(url, new=2, autoraise=False)
         elif key in ('o', 'O'):
             os.makedirs(os.path.join(xdg_config_home, "/tmp/googlit"), exist_ok=True)
+            # Image galleries
+            if gallery_dl.extractor.find(url):
+                def view_images():
+                    try:
+                        dir_download = '/tmp/googlit/%f' % time.time()
+                        os.makedirs(dir_download, exist_ok=True)
+                        gallery_dl.config.load()
+                        gallery_dl.config.set(('extractor',), "directory", "")
+                        gallery_dl.config.set(('extractor',), "base-directory", dir_download)
+                        gallery_dl.config.set(('output',), 'mode', 'null')
+                        gallery_dl.job.DownloadJob(url).run()
+                        viewer, *options = imageviewer.split(';')
+                        subprocess.Popen(shlex.split(viewer if 'noterm' in options else '%s %s' % 
+                            (termexec, viewer))+[dir_download], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                        return key
+                    except:
+                        pass
+
+                thread = threading.Thread(target=view_images)
+                thread.start()
+
             # Youtube-like videos
             try:
                 for e in youtube_dl.extractor.gen_extractors():
                     if e.suitable(url) and e.IE_NAME != 'generic':
-                        subprocess.Popen([mediaplayer, url], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                        viewer, *options = mediaplayer.split(';')
+                        subprocess.Popen(shlex.split(viewer if 'noterm' in options else '%s %s' % 
+                            (termexec, viewer))+[url], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
                         return key
             except:
                 pass
 
-            # Image galleries
-
             # Everything else
             response = requests.head(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
             if response.headers['content-type'].split('/')[0] == 'video':
-                response = requests.head(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
-                subprocess.Popen([mediaplayer, url], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                def view_video():
+                    subprocess.Popen([mediaplayer, url], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                thread = threading.Thread(target=view_video)
+                thread.start()
             elif response.headers['content-type'] == 'application/msword' or url.split('/')[-1].split('.')[-1] == 'doc':
                 thread = threading.Thread(target=download_and_open(url, docviewer))
                 thread.start()
@@ -170,7 +196,7 @@ class ListBoxItem(urwid.Text):
                 thread = threading.Thread(target=download_and_open(url, pdfviewer))
                 thread.start()
             else:
-                def preview_html():
+                def view_html():
                     downloaded = trafilatura.fetch_url(url)
                     if downloaded:
                         fname = '/tmp/googlit/%f.txt' % time.time()
@@ -179,7 +205,7 @@ class ListBoxItem(urwid.Text):
                             with open(fname, 'w') as f:
                                 f.write(result)
                             subprocess.call(shlex.split('%s %s %s' % (termexec, pager, f.name)))
-                thread = threading.Thread(target=preview_html)
+                thread = threading.Thread(target=view_html)
                 thread.start()
         elif key in ('y', 'Y'):
             pyperclip.copy(listbox.get_focus()[0].base_widget.text.splitlines()[1])
@@ -214,14 +240,16 @@ def exit_on_cq(input):
     if input in ('ctrl q', 'ctrl Q'):
         # Clean up our mess
         for f in glob.glob('/tmp/googlit/*'):
-            os.remove(f)
+            if os.path.isdir(f):
+                shutil.rmtree(f)
+            else:
+                os.remove(f)
         raise urwid.ExitMainLoop()
 
 searchicon = urwid.Text("\U0001F50D")
 searchbox = urwid.AttrMap(SearchBox(""), "searchbox", focus_map="searchbox_focus")
 content = urwid.SimpleListWalker([])
 listbox = urwid.ListBox(content)
-preview = urwid.Text("")
 
 frame = urwid.Frame(listbox, urwid.Pile([urwid.Columns([(3, searchicon), searchbox]), urwid.AttrMap(urwid.Divider('─'), "border")]), focus_part="header")
 
