@@ -2,6 +2,9 @@
 import configparser, gallery_dl, glob, markdown, os, pyperclip, re, requests, shlex, shutil, subprocess, threading, time, trafilatura, webbrowser, urwid, youtube_dl
 from importlib.machinery import SourceFileLoader
 googler = SourceFileLoader("googler", "/usr/local/bin/googler").load_module()
+from io import BytesIO
+from libsixel import *
+from PIL import Image
 from urllib.request import urlopen, urlparse, Request
 from xdg.BaseDirectory import *
 
@@ -21,6 +24,7 @@ config_defaults_googlit = {
         'ipv6': 'false',
         'termexec': 'xterm -e',
         'pager': 'less -r',
+        'sixels': 'false',
         'mediaplayer': 'mpv;noterm',
         'docviewer': 'antiword -f -w 80;pager',
         'imageviewer': 'fim -R',
@@ -98,6 +102,7 @@ if config.getboolean('googlit', 'ipv6'):
     googler_options.append('--ipv6')
 termexec = config['googlit']['termexec']
 pager = config['googlit']['pager']
+sixels = config.getboolean('googlit', 'sixels')
 mediaplayer = config['googlit']['mediaplayer']
 docviewer = config['googlit']['docviewer']
 imageviewer = config['googlit']['imageviewer']
@@ -105,7 +110,7 @@ pdfviewer = config['googlit']['pdfviewer']
 tabviewer = config['googlit']['tabviewer']
 
 def markdown2ansi(text):
-    text = markdown.markdown(text).replace('<p>', '').replace('</p>')
+    text = markdown.markdown(text).replace('<p>', '').replace('</p>', '')
 
     replacements = [('(<strong>)', r'\033[1m'), ('(</strong>)', r'\033[0m'), ('(<em>)', r'\033[3m'), 
             ('(</em>)', r'\033[0m'), ('(<ins>)', r'\033[4m'), ('(</ins>)', r'\033[0m'), ('(<del>)', 
@@ -114,6 +119,27 @@ def markdown2ansi(text):
     for htag, eseq in replacements:
         text = re.sub(htag, eseq, text, flags=re.MULTILINE)
 
+    return text
+
+def imgurls2sixels(text):
+    def imgurl2sixel(url):
+        response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+        fname = '/tmp/googlit/'+url.split("/")[-1]
+        with open(fname, 'wb') as f:
+            f.write(response.content)
+
+        i = Image.open(fname)
+        i = i.convert('RGBA')
+
+        sixel = BytesIO()
+        dither = sixel_dither_new(256)
+        sixel_dither_initialize(dither, i.tobytes(), i.width, i.height, SIXEL_PIXELFORMAT_RGBA8888)
+        sixel_encode(i.tobytes(), i.width, i.height, 1, dither,
+                sixel_output_new(lambda imgdata, sixel: sixel.write(imgdata), sixel))
+
+        return (sixel.getvalue().decode('ascii'))
+
+    text = re.sub('^(http|https://.*?\.jpg|png|webp)$', lambda x: imgurl2sixel(x.group()), text, flags=re.MULTILINE)
     return text
 
 def download_and_open(url, viewer):
@@ -215,6 +241,8 @@ class ListBoxItem(urwid.Text):
                         result = trafilatura.extract(downloaded, include_formatting=True, include_images=True)
                         if result:
                             result = markdown2ansi(result)
+                            if sixels:
+                                result = imgurls2sixels(result)
                             with open(fname, 'wb') as f:
                                 f.write(result.encode('utf-8'))
                             subprocess.call(shlex.split('%s %s %s' % (termexec, pager, f.name)))
