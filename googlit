@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import configparser, gallery_dl, glob, os, pyperclip, requests, shlex, shutil, subprocess, threading, time, trafilatura, webbrowser, urwid, youtube_dl
+import configparser, gallery_dl, glob, markdown, os, pyperclip, re, requests, shlex, shutil, subprocess, threading, time, trafilatura, webbrowser, urwid, youtube_dl
 from importlib.machinery import SourceFileLoader
 googler = SourceFileLoader("googler", "/usr/local/bin/googler").load_module()
 from urllib.request import urlopen, urlparse, Request
@@ -104,6 +104,18 @@ imageviewer = config['googlit']['imageviewer']
 pdfviewer = config['googlit']['pdfviewer']
 tabviewer = config['googlit']['tabviewer']
 
+def markdown2ansi(text):
+    text = markdown.markdown(text).replace('<p>', '').replace('</p>')
+
+    replacements = [('(<strong>)', r'\033[1m'), ('(</strong>)', r'\033[0m'), ('(<em>)', r'\033[3m'), 
+            ('(</em>)', r'\033[0m'), ('(<ins>)', r'\033[4m'), ('(</ins>)', r'\033[0m'), ('(<del>)', 
+            r'\033[9m'), ('(</del>)', r'\033[0m')]
+
+    for htag, eseq in replacements:
+        text = re.sub(htag, eseq, text, flags=re.MULTILINE)
+
+    return text
+
 def download_and_open(url, viewer):
     response = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
     fname = '/tmp/googlit/'+response.headers.get("Content-Disposition").split("filename=")[1] if "Content-Disposition" in response.headers.keys() else '/tmp/googlit/'+url.split("/")[-1]
@@ -200,10 +212,11 @@ class ListBoxItem(urwid.Text):
                     downloaded = trafilatura.fetch_url(url)
                     if downloaded:
                         fname = '/tmp/googlit/%f.txt' % time.time()
-                        result = trafilatura.extract(downloaded, include_formatting=True)
+                        result = trafilatura.extract(downloaded, include_formatting=True, include_images=True)
                         if result:
-                            with open(fname, 'w') as f:
-                                f.write(result)
+                            result = markdown2ansi(result)
+                            with open(fname, 'wb') as f:
+                                f.write(result.encode('utf-8'))
                             subprocess.call(shlex.split('%s %s %s' % (termexec, pager, f.name)))
                 thread = threading.Thread(target=view_html)
                 thread.start()
